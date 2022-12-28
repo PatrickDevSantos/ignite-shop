@@ -1,41 +1,46 @@
-import axios from 'axios'
 import { GetStaticPaths, GetStaticProps } from 'next'
 import Head from 'next/head'
 import Image from 'next/image'
-import { useState } from 'react'
 import Stripe from 'stripe'
+import { useShoppingCart } from 'use-shopping-cart'
+import { Header } from '../../components/Header'
 import { stripe } from '../../lib/stripe'
 import { ImageContainer, ProductContainer, ProductDetail } from '../../styles/pages/product'
 
+export interface Product {
+  id: string;
+  name: string;
+  imageUrl: string;
+  price: number,
+  description: string;
+  defaultPriceId: string;
+  formattedPrice: string;
+}
+
 interface ProductProps {
-  product: {
-    id: string;
-    name: string;
-    imageUrl: string;
-    price: string,
-    description: string;
-    defaultPriceId: string;
-  }
+  product: Product;
 }
 
 export default function Product({ product }: ProductProps) {
-  const [isCreatingCheckoutSession, setIsCreatingCheckoutSession] = useState(false)
+  const { addItem } = useShoppingCart()
 
-  async function handleBuyPoduct() {
-    try {
-      setIsCreatingCheckoutSession(true)
-      const response = await axios.post('/api/checkout', {
-        priceId: product.defaultPriceId
-      })
-
-      const { checkoutUrl } = response.data
-
-      window.location.href = checkoutUrl
-    } catch (err) {
-      //conectar com uma ferramenta de observabilidade(Datadog / Sentry)
-      setIsCreatingCheckoutSession(false)
-      alert('Falha ao redirecionar ao checkout!')
-    }
+  function handleAddToCart(product: Product) {
+    addItem(
+      {
+        name: product.name,
+        description: product.description,
+        id: product.id,
+        price: product.price,
+        currency: 'BRL',
+        imageUrl: product.imageUrl
+      },
+      {
+        count: 1,
+        price_metadata: {
+          priceId: product.defaultPriceId
+        }
+      }
+    )
   }
 
   return (
@@ -43,15 +48,16 @@ export default function Product({ product }: ProductProps) {
       <Head>
         <title>{product.name} | Ignite Shop</title>
       </Head>
+      <Header />
       <ProductContainer>
         <ImageContainer>
           <Image src={product.imageUrl} width={520} height={480} alt="" />
         </ImageContainer>
         <ProductDetail>
           <h1>{product.name}</h1>
-          <span>{product.price}</span>
+          <span>{product.formattedPrice}</span>
           <p>{product.description}</p>
-          <button disabled={isCreatingCheckoutSession} onClick={handleBuyPoduct}>Comprar agora</button>
+          <button onClick={() => handleAddToCart(product)}>Comprar agora</button>
         </ProductDetail>
       </ProductContainer>
     </>
@@ -79,12 +85,13 @@ export const getStaticProps: GetStaticProps<any, { id: string }> = async ({ para
         id: product.id,
         name: product.name,
         imageUrl: product.images[0],
-        price: price.unit_amount ? new Intl.NumberFormat('pt-BR', {
+        price: price.unit_amount,
+        description: product.description,
+        defaultPriceId: price.id,
+        formattedPrice: price.unit_amount ? new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL'
         }).format(price.unit_amount / 100) : null,
-        description: product.description,
-        defaultPriceId: price.id
       }
     },
     revalidate: 60 * 60 * 1
